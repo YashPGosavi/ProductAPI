@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import logging
 import time
 import re
+import pandas as pd
 import json
 
 def scrape_flipkart(product_name, flipkart_link=None, max_retries=3):
