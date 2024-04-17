@@ -3,66 +3,70 @@ from bs4 import BeautifulSoup
 import logging
 import time
 import re
-import pandas as pd  # Add this import statement
+import json
 
+def scrape_flipkart(product_name, flipkart_link=None, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            if flipkart_link:
+                headers = {
+                    'User-Agent': 'Your user agent here',
+                    'Accept-Language': 'en-us,en;q=0.5'
+                }
+                response = requests.get(flipkart_link, headers=headers)
+                response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
 
-# User-Agent and Accept-Language headers
-headers = {
-    'User-Agent': 'Your user agent here',
-    'Accept-Language': 'en-us,en;q=0.5'
-}
+                soup = BeautifulSoup(response.content, 'html.parser')
+                title = soup.find("span", {"class": "B_NuCI"}).text.strip()
+                price = float(soup.find("div", {"class": "_30jeq3 _16Jk6d"}).text.replace(',', '').replace('₹', '').strip())
+                image_urls = [img['src'] for img in soup.find_all("img", {"class": "_396cs4"})]
+                description = soup.find("div", {"class": "_1mXcCf RmoJUa"}).text.strip()
+                return {
+                    "title": title,
+                    "flipkart_price": price,
+                    "image_urls": image_urls,
+                    "flipkart_buy_link": flipkart_link,
+                    "description": description,
+                    "platform": "Flipkart"
+                }
+            else:
+                products = []
+                flipkart_url = f"https://www.flipkart.com/search?q={product_name}"
+                headers = {
+                    'User-Agent': 'Your user agent here',
+                    'Accept-Language': 'en-us,en;q=0.5'
+                }
+                response = requests.get(flipkart_url, headers=headers)
+                response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
 
-def scrape_flipkart(product_name, flipkart_link=None):
-    try:
-        if flipkart_link:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-            response = requests.get(flipkart_link, headers=headers)
-            response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
+                soup = BeautifulSoup(response.content, 'html.parser')
+                product_cards = soup.find_all("div", class_="_1AtVbE")
+                for card in product_cards:
+                    title_element = card.find("div", class_="_4rR01T")
+                    if title_element:
+                        title = title_element.text.strip()
+                        image_url = card.find("img")['src']
+                        product_link = "https://www.flipkart.com" + card.find("a")['href']
+                        products.append({"title": title, "image_url": image_url, "product_link": product_link})
+                return products
+        except requests.HTTPError as e:
+            logging.error(f"HTTP error occurred while scraping Flipkart: {e}")
+            time.sleep(1)  # Wait for 1 second before retrying
+        except Exception as e:
+            logging.error(f"Exception occurred while scraping Flipkart: {e}")
+            time.sleep(1)  # Wait for 1 second before retrying
 
-            soup = BeautifulSoup(response.content, 'html.parser')
-            title = soup.find("span", {"class": "B_NuCI"}).text.strip()
-            price = float(soup.find("div", {"class": "_30jeq3 _16Jk6d"}).text.replace(',', '').replace('₹', '').strip())
-            image_urls = [img['src'] for img in soup.find_all("img", {"class": "_396cs4"})]
-            description = soup.find("div", {"class": "_1mXcCf RmoJUa"}).text.strip()
-            return {
-                "title": title,
-                "flipkart_price": price,
-                "image_urls": image_urls,
-                "flipkart_buy_link": flipkart_link,
-                "description": description,
-                "platform": "Flipkart"
-            }
-        else:
-            products = []
-            flipkart_url = f"https://www.flipkart.com/search?q={product_name}"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-            }
-            response = requests.get(flipkart_url, headers=headers)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            product_cards = soup.find_all("div", class_="_1AtVbE")
-            for card in product_cards:
-                title_element = card.find("div", class_="_4rR01T")
-                if title_element:
-                    title = title_element.text.strip()
-                    image_url = card.find("img")['src']
-                    product_link = "https://www.flipkart.com" + card.find("a")['href']
-                    products.append({"title": title, "image_url": image_url, "product_link": product_link})
-            return products
-    except requests.HTTPError as e:
-        logging.error(f"HTTP error occurred while scraping Flipkart: {e}")
-        return {}
-    except Exception as e:
-        logging.error(f"Exception occurred while scraping Flipkart: {e}")
-        return {}
+    # If all retries fail, return an empty dictionary or list
+    return {}
 
 def scrape_amazon_with_retry(product_name, retry=5):
     for _ in range(retry):
         try:
             amazon_url = f"https://www.amazon.in/s?k={product_name}"
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+                'User-Agent': 'Your user agent here',
+                'Accept-Language': 'en-us,en;q=0.5'
+            }
             response = requests.get(amazon_url, headers=headers)
             response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
 
@@ -108,7 +112,6 @@ def scrape_product_info(product_title, flipkart_link):
         return {"error": "Product details not found on both Flipkart and Amazon."}
 
 def get_review_url(flipkart_link):
-    # Extract the product ID from the input URL
     product_id_match = re.search(r'/p/(.*?)\?', flipkart_link)
     if product_id_match:
         product_id = product_id_match.group(1)
@@ -126,30 +129,25 @@ def scrape_reviews(url):
     reviews_collected = 0
 
     while reviews_collected < 100:
-        # Send a GET request to the provided URL
-        page = requests.get(url, headers=headers)
+        page = requests.get(url)
         soup = BeautifulSoup(page.content, 'html.parser')
 
-        # Extract customer names
         names = soup.find_all('p', class_='_2sc7ZR _2V5EHH')
         for name in names:
             customer_names.append(name.get_text())
 
-        # Extract review titles
         title = soup.find_all('p', class_='_2-N8zT')
         for t in title:
             review_title.append(t.get_text())
 
-        # Extract ratings
         rat = soup.find_all('div', class_='_3LWZlK _1BLPMq')
         for r in rat:
             rating = r.get_text()
             if rating:
                 ratings.append(rating)
             else:
-                ratings.append('0')  # Replace null ratings with 0
+                ratings.append('0')
 
-        # Extract comments
         cmt = soup.find_all('div', class_='t-ZTKy')
         for c in cmt:
             comment_text = c.div.div.get_text(strip=True)
@@ -157,22 +155,18 @@ def scrape_reviews(url):
 
         reviews_collected += len(names)
 
-        # Check if there are more pages to scrape
         next_button = soup.find('a', class_='_1LKTO3')
         if not next_button or reviews_collected >= 100:
             break
 
-        # Get the URL for the next page
         url = 'https://www.flipkart.com' + next_button['href']
 
-    # Ensure all lists have the same length
     min_length = min(len(customer_names), len(review_title), len(ratings), len(comments))
     customer_names = customer_names[:min_length]
     review_title = review_title[:min_length]
     ratings = ratings[:min_length]
     comments = comments[:min_length]
 
-    # Create a DataFrame from the collected data
     data = {
         'user': customer_names,
         'review_title': review_title,
@@ -182,7 +176,6 @@ def scrape_reviews(url):
 
     df = pd.DataFrame(data)
 
-    # Convert DataFrame to JSON format
     result_json = df.to_json(orient='records')
 
     return result_json
