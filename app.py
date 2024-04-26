@@ -69,7 +69,7 @@ def scrape_flipkart(product_name, flipkart_link):
 def scrape_amazon_with_retry(product_name, retry=5):
     for _ in range(retry):
         try:
-            amazon_url = f"https://www.amazon.in/s?k={product_name}&ref=nb_sb_noss"
+            amazon_url = f"https://www.amazon.in/s?k={product_name}"
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
             response = requests.get(amazon_url, headers=headers)
