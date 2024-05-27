@@ -1,12 +1,13 @@
 from flask import Flask, jsonify, request
-import requests
+from flask_cors import CORS
+import aiohttp
+import nest_asyncio
 from bs4 import BeautifulSoup
 import pandas as pd
 import logging
-import time
+import asyncio
 import re
 import json
-from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -20,125 +21,87 @@ headers = {
     'Accept-Language': 'en-us,en;q=0.5'
 }
 
-# Search Product
-def scrape_product(product_name):
-    products = []
-    flipkart_url = f"https://www.flipkart.com/search?q={product_name}"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-    }
-    response = requests.get(flipkart_url, headers=headers)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    product_cards = soup.find_all("div", class_="tUxRFH")
-    for card in product_cards:
-        title_element = card.find("div", class_="KzDlHZ")
-        if title_element:
-            title = title_element.text.strip()
-            image_url = card.find("img")['src']
-            product_link = "https://www.flipkart.com" + card.find("a")['href']
-            products.append({"title": title, "image_url": image_url, "product_link": product_link})
-    return products
+# Apply nest_asyncio to allow running asyncio in a Flask app
+nest_asyncio.apply()
 
+async def fetch(url, session):
+    async with session.get(url) as response:
+        return await response.text()
 
-# Scrap Product Information
-
-# 1. Flipcart
-def scrape_flipkart(product_name, flipkart_link):
+async def scrape_flipkart_async(product_name, flipkart_link):
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        response = requests.get(flipkart_link, headers=headers)
-        response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
-
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # title 
-        title = soup.find("span", {"class": "VU-ZEz"}).text.strip()
-        
-        # price
-        price = float(soup.find("div", {"class": "Nx9bqj CxhGGd"}).text.replace(',', '').replace('₹', '').strip())
-        
-        # images
-        image_urls = [img['src'] for img in soup.find_all("img", {"class": "DByuf4 IZexXJ jLEJ7H"})]
-        
-        product_specifications = soup.find("div", {"class": "U+9u4y"}).text.strip()
-        
-        description = soup.find("div", {"class": "yN+eNk w9jEaj"}).text.strip()
-        offers_list = soup.find_all("li", class_="kF1Ml8 col")
-        
-        payment_options = [item.text.strip() for item in soup.find_all("li", {"class": "g11wDd"})]
-
-        delivery_by = soup.find("div", {"class": "hVvnXm"}).text.replace('?','').strip()
-        
-        color_storage = [item.text.strip() for item in soup.find_all("li", {"class": "aJWdJI"})]
-        
-        rating = soup.find("div", {"class": "ipqd2A"}).text.strip()
-        
-        no_of_ratings = soup.find("div", {"class": "row j-aW8Z"}).text.replace('&','').strip()
-
-        total_rating = rating + " of " + no_of_ratings
-
-        
-        flipkart_offers = []
-        for offer in offers_list:
-            offer_spans = offer.find_all("span", recursive=False)
-            offer_text = ' '.join(span.get_text(strip=True) for span in offer_spans)
-            flipkart_offers.append(offer_text)
-
-        return {
-            "title": title,
-            "flipkart_price": price,
-            "image_urls": image_urls,
-            "flipkart_buy_link": flipkart_link,
-            "product_specifications": product_specifications,
-            "description" : description,
-            "payment_options" : payment_options,
-            "flipkart_offers" : flipkart_offers,
-            "color_storage" : color_storage,
-            "delivery_by" : delivery_by,
-            "total_rating" : total_rating,
-            "platform": "Flipkart"
-            
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
         }
-    except requests.HTTPError as e:
-        logging.error(f"HTTP error occurred while scraping Flipkart: {e}")
-        return {}
+        async with aiohttp.ClientSession(headers=headers) as session:
+            response_text = await fetch(flipkart_link, session)
+            soup = BeautifulSoup(response_text, 'html.parser')
+            # Your scraping logic here
+            title = soup.find("span", {"class": "B_NuCI"}).text.strip()
+            price = float(soup.find("div", {"class": "_30jeq3 _16Jk6d"}).text.replace(',', '').replace('₹', '').strip())
+            image_urls = [img['src'] for img in soup.find_all("img", {"class": "_396cs4 _3exPp9"})]
+            product_specifications = soup.find("div", {"class": "_2418kt"}).text.strip()
+            description = soup.find("div", {"class": "_1mXcCf RmoJUa"}).text.strip()
+            offers_list = soup.find_all("li", class_="_16eBzU col")
+            payment_options = [item.text.strip() for item in soup.find_all("li", {"class": "_1DuK2S"})]
+            delivery_by = soup.find("div", {"class": "_3XINqE"}).text.replace('?', '').strip()
+            color_storage = [item.text.strip() for item in soup.find_all("li", {"class": "_3V2wfe _2Wpvfz"})]
+            rating = soup.find("div", {"class": "_3LWZlK"}).text.strip()
+            no_of_ratings = soup.find("span", {"class": "_2_R_DZ"}).text.strip()
+
+            flipkart_offers = []
+            for offer in offers_list:
+                offer_spans = offer.find_all("span", recursive=False)
+                offer_text = ' '.join(span.get_text(strip=True) for span in offer_spans)
+                flipkart_offers.append(offer_text)
+
+            return {
+                "title": title,
+                "flipkart_price": price,
+                "image_urls": image_urls,
+                "flipkart_buy_link": flipkart_link,
+                "product_specifications": product_specifications,
+                "description": description,
+                "payment_options": payment_options,
+                "flipkart_offers": flipkart_offers,
+                "color_storage": color_storage,
+                "delivery_by": delivery_by,
+                "total_rating": rating + " of " + no_of_ratings,
+                "platform": "Flipkart"
+            }
     except Exception as e:
         logging.error(f"Exception occurred while scraping Flipkart: {e}")
         return {}
 
-
-# 2. Amazon
-def scrape_amazon_with_retry(product_name, retry=5):
-    for _ in range(retry):
-        try:
-            amazon_url = f"https://www.amazon.in/s?k={product_name}&ref=nb_sb_noss"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-            response = requests.get(amazon_url, headers=headers)
-            response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
-
-            soup = BeautifulSoup(response.content, 'html.parser')
-            product_link = soup.find("a", {"class": "a-link-normal s-no-outline"})['href']
-            flipkart_link = f"https://www.amazon.in{product_link}"
-            title = soup.find("span", {"class": "a-size-medium a-color-base a-text-normal"}).text.strip()
-            price = float(soup.find("span", {"class": "a-price-whole"}).text.replace(',', ''))
-            
-            return {
-                "title": title,
-                "amazon_price": price,
-                "amazon_buy_link": flipkart_link,
-                "platform": "Amazon"
-            }
-            
-        except Exception as e:
-            logging.error(f"Exception occurred while scraping Amazon: {e}")
-            time.sleep(1)  # Wait for 1 second before retrying
+async def scrape_amazon_with_retry_async(product_name, retry=5):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    }
+    async with aiohttp.ClientSession(headers=headers) as session:
+        for _ in range(retry):
+            try:
+                amazon_url = f"https://www.amazon.in/s?k={product_name}&ref=nb_sb_noss"
+                response_text = await fetch(amazon_url, session)
+                soup = BeautifulSoup(response_text, 'html.parser')
+                product_link = soup.find("a", {"class": "a-link-normal s-no-outline"})['href']
+                amazon_link = f"https://www.amazon.in{product_link}"
+                title = soup.find("span", {"class": "a-size-medium a-color-base a-text-normal"}).text.strip()
+                price = float(soup.find("span", {"class": "a-price-whole"}).text.replace(',', ''))
+                
+                return {
+                    "title": title,
+                    "amazon_price": price,
+                    "amazon_buy_link": amazon_link,
+                    "platform": "Amazon"
+                }
+            except Exception as e:
+                logging.error(f"Exception occurred while scraping Amazon: {e}")
+                await asyncio.sleep(1)  # Wait for 1 second before retrying
     return {}
 
-def scrape_product_info(product_title, flipkart_link):
-    flipkart_details = scrape_flipkart(product_title, flipkart_link)
-    amazon_details = scrape_amazon_with_retry(product_title)
+async def scrape_product_info_async(product_title, flipkart_link):
+    flipkart_details = await scrape_flipkart_async(product_title, flipkart_link)
+    amazon_details = await scrape_amazon_with_retry_async(product_title)
 
     if flipkart_details and amazon_details:
         return {
@@ -185,17 +148,17 @@ def scrape_reviews(url):
         soup = BeautifulSoup(page.content, 'html.parser')
 
         # Extract customer names
-        names = soup.find_all('p', class_='_2NsDsF AwS1CA')
+        names = soup.find_all('p', class_='_2sc7ZR _2V5EHH')
         for name in names:
             customer_names.append(name.get_text())
 
         # Extract review titles
-        title = soup.find_all('p', class_='z9E0IG')
+        title = soup.find_all('p', class_='_2-N8zT')
         for t in title:
             review_title.append(t.get_text())
 
         # Extract ratings
-        rat = soup.find_all('div', class_='XQDdHH Ga3i8K')
+        rat = soup.find_all('div', class_='_3LWZlK _1BLPMq')
         for r in rat:
             rating = r.get_text()
             if rating:
@@ -204,7 +167,7 @@ def scrape_reviews(url):
                 ratings.append('0')  # Replace null ratings with 0
 
         # Extract comments
-        cmt = soup.find_all('div', class_='ZmyHeo')
+        cmt = soup.find_all('div', class_='t-ZTKy')
         for c in cmt:
             comment_text = c.div.div.get_text(strip=True)
             comments.append(comment_text)
@@ -212,7 +175,7 @@ def scrape_reviews(url):
         reviews_collected += len(names)
 
         # Check if there are more pages to scrape
-        next_button = soup.find('a', class_='_9QVEpD')
+        next_button = soup.find('a', class_='_1LKTO3')
         if not next_button or reviews_collected >= 100:
             break
 
@@ -246,43 +209,12 @@ def index():
     return 'Thanks For Searching'
 
 @app.route('/search', methods=['POST'])
-def search_products():
+async def search_products():
     data = request.get_json()
     product_name = data.get('product_name')
     if not product_name:
         return jsonify({"error": "Product name is required"}), 400
     
-    products = scrape_product(product_name)
+    products = await scrape_flipkart_async(product_name, f"https://www.flipkart.com/search?q={product_name}")
     print("Scraped products:", products)  # Add this line to print the scraped products
-    return jsonify({"products": products})
-
-@app.route('/productInfo', methods=['POST'])
-def product_info():
-    data = request.json
-    product_title = data.get('title')
-    flipkart_link = data.get('flipkart_link')
-
-    if not product_title or not flipkart_link:
-        return jsonify({"error": "Title and Flipkart link are required."}), 400
-
-    product_info = scrape_product_info(product_title, flipkart_link)
-
-    # Get the review URL from the product URL
-    review_url = get_review_url(flipkart_link)
-    if not review_url:
-        return jsonify({'error': 'Invalid product URL'}), 400
-
-    # Scrape the reviews
-    result_json = scrape_reviews(review_url)
-
-    # Parse the JSON string into a Python object
-    reviews = json.loads(result_json)
-
-    # Append reviews to product info
-    product_info['reviews'] = reviews
-
-    # Return product info with reviews
-    return jsonify(product_info)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000, debug=True)
+    return jsonify
