@@ -20,9 +20,10 @@ headers = {
     'Accept-Language': 'en-us,en;q=0.5'
 }
 
+# Search Product
 def scrape_product(product_name):
     products = []
-    flipkart_url = f"https://www.flipkart.com/search?q={product_name}"
+    flipkart_url = f"https://www.flipkart.com/search?q={product_name}&sid=tyy%2C4io&as=on&as-show=on&otracker=AS_QueryStore_OrganicAutoSuggest_1_2_na_na_ps&otracker1=AS_QueryStore_OrganicAutoSuggest_1_2_na_na_ps&as-pos=1&as-type=RECENT&suggestionId=samsung+mobiles%7CMobiles&requestId=e292328f-64a6-4cf5-ab8b-55d8a796a37e&as-backfill=on"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
     }
@@ -39,6 +40,9 @@ def scrape_product(product_name):
     return products
 
 
+# Scrap Product Information
+
+# 1. Flipcart
 def scrape_flipkart(product_name, flipkart_link):
     try:
         headers = {
@@ -47,17 +51,54 @@ def scrape_flipkart(product_name, flipkart_link):
         response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
 
         soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # title 
         title = soup.find("span", {"class": "VU-ZEz"}).text.strip()
+        
+        # price
         price = float(soup.find("div", {"class": "Nx9bqj CxhGGd"}).text.replace(',', '').replace('₹', '').strip())
+        
+        # images
         image_urls = [img['src'] for img in soup.find_all("img", {"class": "DByuf4 IZexXJ jLEJ7H"})]
-        description = soup.find("div", {"class": "U+9u4y"}).text.strip()
+        
+        product_specifications = soup.find("div", {"class": "U+9u4y"}).text.strip()
+        
+        description = soup.find("div", {"class": "yN+eNk w9jEaj"}).text.strip()
+        offers_list = soup.find_all("li", class_="kF1Ml8 col")
+        
+        payment_options = [item.text.strip() for item in soup.find_all("li", {"class": "g11wDd"})]
+
+        delivery_by = soup.find("div", {"class": "hVvnXm"}).text.replace('?','').strip()
+        
+        color_storage = [item.text.strip() for item in soup.find_all("li", {"class": "aJWdJI"})]
+        
+        rating = soup.find("div", {"class": "ipqd2A"}).text.strip()
+        
+        no_of_ratings = soup.find("div", {"class": "row j-aW8Z"}).text.replace('&','').strip()
+
+        total_rating = rating + " of " + no_of_ratings
+
+        
+        flipkart_offers = []
+        for offer in offers_list:
+            offer_spans = offer.find_all("span", recursive=False)
+            offer_text = ' '.join(span.get_text(strip=True) for span in offer_spans)
+            flipkart_offers.append(offer_text)
+
         return {
             "title": title,
             "flipkart_price": price,
             "image_urls": image_urls,
             "flipkart_buy_link": flipkart_link,
-            "description": description,
+            "product_specifications": product_specifications,
+            "description" : description,
+            "payment_options" : payment_options,
+            "flipkart_offers" : flipkart_offers,
+            "color_storage" : color_storage,
+            "delivery_by" : delivery_by,
+            "total_rating" : total_rating,
             "platform": "Flipkart"
+            
         }
     except requests.HTTPError as e:
         logging.error(f"HTTP error occurred while scraping Flipkart: {e}")
@@ -66,10 +107,12 @@ def scrape_flipkart(product_name, flipkart_link):
         logging.error(f"Exception occurred while scraping Flipkart: {e}")
         return {}
 
+
+# 2. Amazon
 def scrape_amazon_with_retry(product_name, retry=5):
     for _ in range(retry):
         try:
-            amazon_url = f"https://www.amazon.in/s?k={product_name}"
+            amazon_url = f"https://www.amazon.in/s?k={product_name}&ref=nb_sb_noss"
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
             response = requests.get(amazon_url, headers=headers)
@@ -80,12 +123,14 @@ def scrape_amazon_with_retry(product_name, retry=5):
             flipkart_link = f"https://www.amazon.in{product_link}"
             title = soup.find("span", {"class": "a-size-medium a-color-base a-text-normal"}).text.strip()
             price = float(soup.find("span", {"class": "a-price-whole"}).text.replace(',', ''))
+            
             return {
                 "title": title,
                 "amazon_price": price,
                 "amazon_buy_link": flipkart_link,
                 "platform": "Amazon"
             }
+            
         except Exception as e:
             logging.error(f"Exception occurred while scraping Amazon: {e}")
             time.sleep(1)  # Wait for 1 second before retrying
