@@ -23,7 +23,7 @@ headers = {
 # Search Product
 def scrape_product(product_name):
     products = []
-    flipkart_url = f"https://www.flipkart.com/search?q={product_name}&sid=tyy%2C4io&as=on&as-show=on&otracker=AS_QueryStore_OrganicAutoSuggest_1_2_na_na_ps&otracker1=AS_QueryStore_OrganicAutoSuggest_1_2_na_na_ps&as-pos=1&as-type=RECENT&suggestionId=samsung+mobiles%7CMobiles&requestId=e292328f-64a6-4cf5-ab8b-55d8a796a37e&as-backfill=on"
+    flipkart_url = f"https://www.flipkart.com/search?q={product_name}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
     }
